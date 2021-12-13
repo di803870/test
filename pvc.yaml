@@ -1,0 +1,138 @@
+# keduitsecret
+#
+
+apiVersion: v1
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOnsidXNlcm5hbWUiOiJkaTgwMzg3MCIsInBhc3N3b3JkIjoiZG5ybGRucmw2OSIsImF1dGgiOiJaR2s0TURNNE56QTZaRzV5YkdSdWNtdzJPUT09In19fQ==
+kind: Secret
+metadata:
+  creationTimestamp: "2021-12-11T06:27:46Z"
+  name: testing
+  namespace: testing
+  resourceVersion: "215418"
+  uid: 02c5c794-030a-4bd7-a5c0-359dddc319b5
+type: kubernetes.io/dockerconfigjson
+---
+#
+#keduitpv
+#
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: testpvc
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany     #RWX
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    path: /cloud
+    server: 211.183.3.199
+    readOnly: false
+
+---
+#
+# keduitpvc
+#
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: testpvc
+  namespace: testing
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+#
+# autocaling
+#
+
+#
+
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: test-deploy                           #service deploy name
+  namespace: testing
+  labels:
+    app: httpd
+spec:
+  maxReplicas: 5
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: test-deploy
+  targetCPUUtilizationPercentage: 10
+
+---
+#
+# deployment keduit
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deploy
+  namespace: testing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpd
+  template:
+    metadata:
+      name: test-pod
+      labels:
+        app: httpd
+    spec:
+      containers:
+      - name: test-ctn
+        image: di803870/testing:red
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: testvol
+          mountPath: /img
+      volumes:
+      - name: testvol
+        persistentVolumeClaim:
+          claimName: testpvc
+      imagePullSecrets:
+      - name: testing
+---
+#
+# service lb
+#
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-lb
+  namespace: testing
+spec:
+  ports:
+    - name: test-lb-port
+      port: 80
+      targetPort: 80
+      nodePort: 30003
+  selector:
+    app: httpd
+  type: NodePort
+
